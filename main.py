@@ -120,9 +120,7 @@ class Agent:
 
         system_prompt = {
             "role": "system",
-            "content": templates.get_template("agent_system.jinja").render(
-                agent=self
-            ),
+            "content": templates.get_template("agent_system.jinja").render(agent=self),
         }
 
         while True:
@@ -153,7 +151,9 @@ class Agent:
                     continue
 
                 arguments = json.loads(tool_call.function.arguments)
-                logger.info("[%s] %s(%s)", self.name, tool_call.function.name, arguments)
+                logger.info(
+                    "[%s] %s(%s)", self.name, tool_call.function.name, arguments
+                )
                 result = function(**arguments)
 
                 self.messages.append(
@@ -243,7 +243,7 @@ def bash(command: str):
 
 def main():
     alice = Agent([], model="glm-4.7:cloud", name="Alice")
-    bob = Agent([bash], model="glm-4.7:cloud", name="Bob")
+    bob = Agent([bash], model="glm-4.7:cloud", name="Bob", description="Has access to the computer.")
 
     with Agency(agents=[alice, bob]) as agency:
         while True:
