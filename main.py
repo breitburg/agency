@@ -17,8 +17,8 @@ logger = logging.getLogger("agency")
 templates = Environment(loader=FileSystemLoader(os.path.dirname(__file__)))
 
 client = OpenAI(
-    base_url="https://ollama.com/v1",
-    api_key=os.environ.get("OLLAMA_API_KEY"),
+    base_url="http://localhost:11434/v1",
+    api_key="ollama",
 )
 
 
@@ -245,16 +245,15 @@ def main():
     alice = Agent([], model="glm-4.7:cloud", name="Alice")
     bob = Agent([bash], model="glm-4.7:cloud", name="Bob", description="Has access to the computer.")
 
-    with Agency(agents=[alice, bob]) as agency:
-        while True:
-            try:
-                user_input = input("> ")
-            except (EOFError, KeyboardInterrupt):
-                break
+    while True:
+        try:
+            user_input = input("> ")
+        except (EOFError, KeyboardInterrupt):
+            break
 
-            alice.messages.append({"role": "user", "content": user_input})
+        alice.messages.append({"role": "user", "content": user_input})
+        with Agency(agents=[alice, bob]) as agency:
             agency.run(alice)
-            agency.agents[alice].join()
 
 
 if __name__ == "__main__":
