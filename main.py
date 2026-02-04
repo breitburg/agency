@@ -11,7 +11,7 @@ from jinja2 import Environment, FileSystemLoader
 from openai import OpenAI
 from time import sleep
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+logging.basicConfig(level=logging.CRITICAL, format="%(asctime)s %(name)s %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("agency")
 
@@ -113,7 +113,14 @@ class Agent:
         agent.messages = self.messages
         return agent
 
-    def run(self, on_before_iteration=None, on_after_iteration=None, on_tool_call=None, on_message=None, **kwargs):
+    def run(
+        self,
+        on_before_iteration=None,
+        on_after_iteration=None,
+        on_tool_call=None,
+        on_message=None,
+        **kwargs,
+    ):
         tool_map = {
             function.schema["function"]["name"]: function for function in self.tools
         }
@@ -183,13 +190,24 @@ class AgentSeat:
 
 
 class Agency:
-    def __init__(self, agents):
+    def __init__(
+        self,
+        agents,
+        on_agent_status_change=None,
+        on_agent_before_iteration=None,
+        on_agent_after_iteration=None,
+        on_agent_tool_call=None,
+        on_agent_message=None,
+    ):
         self.seats = [AgentSeat(agent) for agent in agents]
+        self.on_agent_status_change = on_agent_status_change
+        self.on_agent_before_iteration = on_agent_before_iteration
+        self.on_agent_after_iteration = on_agent_after_iteration
+        self.on_agent_tool_call = on_agent_tool_call
+        self.on_agent_message = on_agent_message
 
     def find_seat(self, agent_id):
-        return next(
-            (seat for seat in self.seats if seat.agent.id == agent_id), None
-        )
+        return next((seat for seat in self.seats if seat.agent.id == agent_id), None)
 
     def create_toolkit(self, agent):
         roster = "\n".join(
@@ -231,9 +249,13 @@ class Agency:
         seat = self.find_seat(agent.id)
         extended = agent.with_tools(self.create_toolkit(agent))
 
+        def with_agent(callback):
+            if callback is None:
+                return None
+            return lambda *args, **kwargs: callback(agent, *args, **kwargs)
+
         def target(**kwargs):
             logger.info("[%s] Waking up", agent.name)
-            on_before_iteration = kwargs.pop("on_before_iteration", None)
 
             def handle_before_iteration():
                 for sender, body in seat.inbox:
@@ -246,12 +268,20 @@ class Agency:
                         }
                     )
                 seat.inbox.clear()
-                if on_before_iteration:
-                    on_before_iteration()
+                if self.on_agent_before_iteration:
+                    self.on_agent_before_iteration(agent)
 
-            extended.run(on_before_iteration=handle_before_iteration, **kwargs)
+            extended.run(
+                on_before_iteration=handle_before_iteration,
+                on_after_iteration=with_agent(self.on_agent_after_iteration),
+                on_tool_call=with_agent(self.on_agent_tool_call),
+                on_message=with_agent(self.on_agent_message),
+                **kwargs,
+            )
             seat.thread = None
             logger.info("[%s] Going to sleep", agent.name)
+            if self.on_agent_status_change:
+                self.on_agent_status_change(seat, False)
 
         seat.thread = threading.Thread(
             target=target,
@@ -259,6 +289,8 @@ class Agency:
             daemon=True,
         )
         seat.thread.start()
+        if self.on_agent_status_change:
+            self.on_agent_status_change(seat, True)
 
 
 @tool(name="Bash")
@@ -274,7 +306,12 @@ def bash(command: str):
 
 def main():
     alice = Agent([], model="glm-4.7:cloud", name="Alice")
-    bob = Agent([bash], model="glm-4.7:cloud", name="Bob", description="Has access to the computer.")
+    bob = Agent(
+        [bash],
+        model="glm-4.7:cloud",
+        name="Bob",
+        description="Has access to the computer.",
+    )
 
     while True:
         try:
@@ -283,7 +320,14 @@ def main():
             break
 
         alice.messages.append({"role": "user", "content": user_input})
-        with Agency(agents=[alice, bob]) as agency:
+
+        def on_agent_status_change(seat, running):
+            status = "woke up" if running else "went to sleep"
+            print(f"{seat.agent.name} {status}")
+
+        with Agency(
+            agents=[alice, bob], on_agent_status_change=on_agent_status_change
+        ) as agency:
             agency.run(alice)
 
         sleep(1)
