@@ -113,11 +113,12 @@ class Agent:
         agent.messages = self.messages
         return agent
 
-    def run(self, on_iteration=None, **kwargs):
+    def run(self, on_before_iteration=None, on_after_iteration=None, on_tool_call=None, on_message=None, **kwargs):
         tool_map = {
             function.schema["function"]["name"]: function for function in self.tools
         }
         schemas = [function.schema for function in self.tools] or None
+        on_tool_call = on_tool_call or (lambda fn, **kw: fn(**kw))
 
         system_prompt = {
             "role": "system",
@@ -125,8 +126,8 @@ class Agent:
         }
 
         while True:
-            if on_iteration:
-                on_iteration()
+            if on_before_iteration:
+                on_before_iteration()
 
             response = client.chat.completions.create(
                 model=self.model,
@@ -139,6 +140,8 @@ class Agent:
 
             if not message.tool_calls:
                 logger.info("[%s] %s", self.name, message.content)
+                if on_message:
+                    on_message(message)
                 return message
 
             for tool_call in message.tool_calls:
@@ -158,7 +161,7 @@ class Agent:
                 logger.info(
                     "[%s] %s(%s)", self.name, tool_call.function.name, arguments
                 )
-                result = function(**arguments)
+                result = on_tool_call(function, **arguments)
 
                 self.messages.append(
                     {
@@ -167,6 +170,9 @@ class Agent:
                         "content": str(result),
                     }
                 )
+
+            if on_after_iteration:
+                on_after_iteration()
 
 
 class AgentSeat:
@@ -227,8 +233,9 @@ class Agency:
 
         def target(**kwargs):
             logger.info("[%s] Waking up", agent.name)
+            on_before_iteration = kwargs.pop("on_before_iteration", None)
 
-            def on_iteration():
+            def handle_before_iteration():
                 for sender, body in seat.inbox:
                     extended.messages.append(
                         {
@@ -239,8 +246,10 @@ class Agency:
                         }
                     )
                 seat.inbox.clear()
+                if on_before_iteration:
+                    on_before_iteration()
 
-            extended.run(on_iteration=on_iteration, **kwargs)
+            extended.run(on_before_iteration=handle_before_iteration, **kwargs)
             seat.thread = None
             logger.info("[%s] Going to sleep", agent.name)
 
