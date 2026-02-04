@@ -9,6 +9,7 @@ from typing import get_type_hints
 
 from jinja2 import Environment, FileSystemLoader
 from openai import OpenAI
+from time import sleep
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -112,7 +113,7 @@ class Agent:
         agent.messages = self.messages
         return agent
 
-    def run(self, **kwargs):
+    def run(self, on_iteration=None, **kwargs):
         tool_map = {
             function.schema["function"]["name"]: function for function in self.tools
         }
@@ -124,6 +125,9 @@ class Agent:
         }
 
         while True:
+            if on_iteration:
+                on_iteration()
+
             response = client.chat.completions.create(
                 model=self.model,
                 messages=[system_prompt, *self.messages],
@@ -165,15 +169,27 @@ class Agent:
                 )
 
 
+class AgentSeat:
+    def __init__(self, agent):
+        self.agent = agent
+        self.thread = None
+        self.inbox = []
+
+
 class Agency:
     def __init__(self, agents):
-        self.agents = {agent: None for agent in agents}
+        self.seats = [AgentSeat(agent) for agent in agents]
+
+    def find_seat(self, agent_id):
+        return next(
+            (seat for seat in self.seats if seat.agent.id == agent_id), None
+        )
 
     def create_toolkit(self, agent):
         roster = "\n".join(
-            f"* {a.name} ({a.id}) - {a.description}"
-            for a in self.agents
-            if a is not agent
+            f"* {seat.agent.name} ({seat.agent.id}) - {seat.agent.description}"
+            for seat in self.seats
+            if seat.agent is not agent
         )
 
         @tool(
@@ -187,19 +203,12 @@ class Agency:
                 agent_id: The 6-character ID of the target agent.
                 body: The message body to send.
             """
-            target = next((a for a in self.agents if a.id == agent_id), None)
-            if not target:
+            seat = self.find_seat(agent_id)
+            if not seat:
                 return f"Agent {agent_id} not found"
-            target.messages.append(
-                {
-                    "role": "user",
-                    "content": templates.get_template(
-                        "message_notification.jinja"
-                    ).render(agent=agent, body=body),
-                }
-            )
-            if self.agents[target] is None:
-                self.run(target)
+            seat.inbox.append((agent, body))
+            if seat.thread is None:
+                self.run(seat.agent)
             return f"Message sent to {agent_id}"
 
         return [send_message]
@@ -208,26 +217,39 @@ class Agency:
         return self
 
     def __exit__(self, *args):
-        for thread in self.agents.values():
-            if thread is not None:
-                thread.join()
+        for seat in self.seats:
+            if seat.thread is not None:
+                seat.thread.join()
 
     def run(self, agent, **kwargs):
+        seat = self.find_seat(agent.id)
         extended = agent.with_tools(self.create_toolkit(agent))
 
         def target(**kwargs):
             logger.info("[%s] Waking up", agent.name)
-            extended.run(**kwargs)
-            self.agents[agent] = None
+
+            def on_iteration():
+                for sender, body in seat.inbox:
+                    extended.messages.append(
+                        {
+                            "role": "user",
+                            "content": templates.get_template(
+                                "message_notification.jinja"
+                            ).render(agent=sender, body=body),
+                        }
+                    )
+                seat.inbox.clear()
+
+            extended.run(on_iteration=on_iteration, **kwargs)
+            seat.thread = None
             logger.info("[%s] Going to sleep", agent.name)
 
-        thread = threading.Thread(
+        seat.thread = threading.Thread(
             target=target,
             kwargs=kwargs,
             daemon=True,
         )
-        thread.start()
-        self.agents[agent] = thread
+        seat.thread.start()
 
 
 @tool(name="Bash")
@@ -254,6 +276,8 @@ def main():
         alice.messages.append({"role": "user", "content": user_input})
         with Agency(agents=[alice, bob]) as agency:
             agency.run(alice)
+
+        sleep(1)
 
 
 if __name__ == "__main__":
