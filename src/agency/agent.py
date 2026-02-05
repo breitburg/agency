@@ -10,7 +10,7 @@ logger = logging.getLogger("agency")
 
 
 class Agent:
-    def __init__(self, tools, model, name, description=None, instructions=None, client=None):
+    def __init__(self, tools, model, name, description=None, instructions=None, client=None, tags=None):
         self.id = secrets.token_hex(3)
         self.tools = tools
         self.model = model
@@ -18,10 +18,11 @@ class Agent:
         self.description = description
         self.instructions = instructions
         self.client = client or OpenAI()
+        self.tags = tags or []
         self.messages = []
 
     def with_tools(self, tools):
-        agent = Agent(self.tools + tools, self.model, self.name, self.description, self.instructions, self.client)
+        agent = Agent(self.tools + tools, self.model, self.name, self.description, self.instructions, self.client, self.tags)
         agent.messages = self.messages
         return agent
 

@@ -35,31 +35,60 @@ class Agency:
     def find_seat(self, agent_id):
         return next((seat for seat in self.seats if seat.agent.id == agent_id), None)
 
+    def find_channel_seats(self, channel, exclude=None):
+        return [
+            seat for seat in self.seats
+            if channel in seat.agent.tags and seat.agent is not exclude
+        ]
+
     def create_toolkit(self, agent):
-        roster = "\n".join(
+        agent_roster = "\n".join(
             f"* {seat.agent.name} ({seat.agent.id}) - {seat.agent.description}"
             for seat in self.seats
             if seat.agent is not agent
         )
 
+        all_tags = {tag for seat in self.seats for tag in seat.agent.tags}
+        channel_roster = "\n".join(
+            f"* #{tag} - {len(members)} agent(s): {', '.join(s.agent.name for s in members)}"
+            for tag in sorted(all_tags)
+            if (members := self.find_channel_seats(tag, exclude=agent))
+        )
+
+        description = f"Send a message to an agent or channel. Available agents:\n{agent_roster}"
+        if channel_roster:
+            description += f"\n\nAvailable channels:\n{channel_roster}"
+
         @tool(
             name="SendMessage",
-            description=f"Send a message to another agent. Available agents:\n{roster}",
+            description=description,
         )
-        def send_message(agent_id: str, body: str):
-            """Send a message to another agent.
+        def send_message(recipient: str, body: str):
+            """Send a message to an agent or channel.
 
             Args:
-                agent_id: The 6-character ID of the target agent.
+                recipient: The 6-character ID of the target agent, or a #channel name.
                 body: The message body to send.
             """
-            seat = self.find_seat(agent_id)
+            if recipient.startswith("#"):
+                channel = recipient[1:]
+                seats = self.find_channel_seats(channel, exclude=agent)
+                if not seats:
+                    return f"Channel #{channel} not found or has no other members"
+                for seat in seats:
+                    seat.inbox.append((agent, body))
+                    if seat.thread is None:
+                        self.run(seat.agent)
+                names = ", ".join(s.agent.name for s in seats)
+                return f"Message sent to #{channel} ({len(seats)} agent(s): {names})"
+
+            seat = self.find_seat(recipient)
             if not seat:
-                return f"Agent {agent_id} not found"
+                return f"Agent {recipient} not found"
             seat.inbox.append((agent, body))
             if seat.thread is None:
                 self.run(seat.agent)
-            return f"Message sent to {agent_id}"
+            return f"Message sent to {seat.agent.name} ({seat.agent.id})"
 
         return [send_message]
 

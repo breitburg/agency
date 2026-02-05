@@ -59,15 +59,16 @@ def main():
     agents = [
         Agent(
             [web_search, web_fetch],
-            model="kimi-k2.5:cloud",
+            model="glm-4.7:cloud",
             name=name,
             description="Have access to the web",
             client=client,
+            tags=["research"],
         )
         for name in NAMES
     ]
 
-    boss = Agent([bash], model="kimi-k2.5:cloud", name="Polina", description="A research team lead", client=client)
+    boss = Agent([bash], model="glm-4.7:cloud", name="Polina", description="A research team lead", client=client)
     agents.append(boss)
 
     while True:
@@ -87,10 +88,15 @@ def main():
         def on_agent_tool_call(agent, fn, **kwargs):
             name = fn.schema["function"]["name"]
             if name == "SendMessage":
+                recipient = kwargs["recipient"]
+                if recipient.startswith("#"):
+                    print(f"{agent.name} to {recipient}: '{kwargs['body']}'")
+                    return fn(**kwargs)
+
                 receiver = next(
                     s.agent.name
                     for s in agency.seats
-                    if s.agent.id == kwargs["agent_id"]
+                    if s.agent.id == recipient
                 )
                 print(f"{agent.name} to {receiver}: '{kwargs['body']}'")
                 return fn(**kwargs)
