@@ -96,7 +96,11 @@ def main():
                 return fn(**kwargs)
 
             args = ", ".join(f"{k}={v!r}" for k, v in kwargs.items())
-            result = fn(**kwargs)
+            try:
+                result = fn(**kwargs)
+            except Exception as e:
+                print(f"{name}({args}) -> failed")
+                return f"Tool call failed with '{e}'"
             first_line = str(result).split("\n", 1)[0]
             print(f"{name}({args}) -> {first_line}")
             return result
