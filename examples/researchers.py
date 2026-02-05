@@ -59,7 +59,7 @@ def main():
     agents = [
         Agent(
             [web_search, web_fetch],
-            model="glm-4.7:cloud",
+            model="kimi-k2.5:cloud",
             name=name,
             description="Have access to the web",
             client=client,
@@ -68,7 +68,7 @@ def main():
         for name in NAMES
     ]
 
-    boss = Agent([bash], model="glm-4.7:cloud", name="Polina", description="A research team lead", client=client)
+    boss = Agent([bash], model="kimi-k2.5:cloud", name="Polina", description="A research team lead", client=client)
     agents.append(boss)
 
     while True:
