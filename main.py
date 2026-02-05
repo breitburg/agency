@@ -305,28 +305,54 @@ def bash(command: str):
 
 
 def main():
-    alice = Agent([], model="glm-4.7:cloud", name="Alice")
+    alice = Agent([], model="kimi-k2.5:cloud", name="Alice")
     bob = Agent(
         [bash],
-        model="glm-4.7:cloud",
+        model="kimi-k2.5:cloud",
         name="Bob",
         description="Has access to the computer.",
     )
-
+    hannah = Agent(
+        [],
+        model="kimi-k2.5:cloud",
+        name="Hannah",
+    )
+    
     while True:
         try:
             user_input = input("> ")
         except (EOFError, KeyboardInterrupt):
             break
 
+        if not user_input:
+            continue
+
         alice.messages.append({"role": "user", "content": user_input})
 
-        def on_agent_status_change(seat, running):
-            status = "woke up" if running else "went to sleep"
-            print(f"{seat.agent.name} {status}")
+        def on_agent_message(agent, message):
+            print(f"{agent.name}: {message.content.strip()}")
+
+        def on_agent_tool_call(agent, fn, **kwargs):
+            name = fn.schema["function"]["name"]
+            if name == "SendMessage":
+                receiver = next(
+                    s.agent.name
+                    for s in agency.seats
+                    if s.agent.id == kwargs["agent_id"]
+                )
+                print(f"{agent.name} to {receiver}: '{kwargs['body']}'")
+                return fn(**kwargs)
+
+            args = ", ".join(f"{k}={v!r}" for k, v in kwargs.items())
+            result = fn(**kwargs)
+            first_line = str(result).split("\n", 1)[0]
+            print(f"{name}({args}) -> {first_line}")
+            return result
 
         with Agency(
-            agents=[alice, bob], on_agent_status_change=on_agent_status_change
+            agents=[alice, bob, hannah],
+            on_agent_message=on_agent_message,
+            on_agent_tool_call=on_agent_tool_call,
         ) as agency:
             agency.run(alice)
 
