@@ -34,10 +34,10 @@ def web_search(query: str):
     Args:
         query: The search query.
     """
-    response = ollama.web_search(query)
+    response = ollama.web_search(query, max_results=3)
     lines = []
     for result in response.results:
-        lines.append(f"{result.title}\n  {result.url}\n  {result.content}")
+        lines.append(f"{result.title}\n  {result.url}\n  {result.content[:8000]}")
     return "\n\n".join(lines) if lines else "No results found."
 
 
