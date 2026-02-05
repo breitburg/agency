@@ -2,6 +2,7 @@ import logging
 import subprocess
 from time import sleep
 
+import ollama
 from openai import OpenAI
 
 from agency import Agent, Agency, tool
@@ -26,6 +27,31 @@ def bash(command: str):
     return result.stdout + result.stderr
 
 
+@tool(name="WebSearch")
+def web_search(query: str):
+    """Search the web and return relevant results.
+
+    Args:
+        query: The search query.
+    """
+    response = ollama.web_search(query)
+    lines = []
+    for result in response.results:
+        lines.append(f"{result.title}\n  {result.url}\n  {result.content}")
+    return "\n\n".join(lines) if lines else "No results found."
+
+
+@tool(name="WebFetch")
+def web_fetch(url: str):
+    """Fetch and read the contents of a web page.
+
+    Args:
+        url: The URL to fetch.
+    """
+    response = ollama.web_fetch(url)
+    return response.content[:8000] if response.content else "No content."
+
+
 def main():
     alice = Agent([], model="kimi-k2.5:cloud", name="Alice", client=client)
     bob = Agent(
@@ -36,9 +62,10 @@ def main():
         client=client,
     )
     hannah = Agent(
-        [],
+        [web_search, web_fetch],
         model="kimi-k2.5:cloud",
         name="Hannah",
+        description="Has access to web search and can fetch web pages.",
         client=client,
     )
 

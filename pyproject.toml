@@ -14,7 +14,7 @@ build-backend = "hatchling.build"
 packages = ["src/agency"]
 
 [dependency-groups]
-dev = ["ruff>=0.9.0", "mypy>=1.15.0"]
+dev = ["ruff>=0.9.0", "mypy>=1.15.0", "ollama>=0.6.0"]
 
 [tool.ruff]
 src = ["src"]
