@@ -109,6 +109,21 @@ with Agency(
 
 The researcher can ask the coder to run a command by calling `SendMessage`, and the coder will wake up, execute it, and reply back.
 
+### Channels
+
+Agents can have `tags` that become broadcast channels inside an `Agency`. Sending a message to `#channel` delivers it to all agents with that tag.
+
+```python
+alice = Agent([], model="gpt-5.2", name="Alice", tags=["research"])
+bob = Agent([], model="gpt-5.2", name="Bob", tags=["research"])
+lead = Agent([], model="gpt-5.2", name="Lead", description="Team lead")
+
+with Agency(agents=[alice, bob, lead]) as agency:
+    agency.run(lead)
+```
+
+The lead agent's `SendMessage` tool will list both individual agents and available channels (e.g. `#research`). Sending to `#research` delivers the message to Alice and Bob simultaneously. Channels are meant for broadcasting announcements and sharing information — task delegation should go to individual agents.
+
 ### Agency callbacks
 
 Agency accepts the same callbacks as `Agent.run()`, prefixed with `on_agent_`, with the agent instance injected as the first argument:
