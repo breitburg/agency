@@ -52,22 +52,23 @@ def web_fetch(url: str):
     return response.content[:8000] if response.content else "No content."
 
 
+NAMES = ["Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Hannah"]
+
+
 def main():
-    alice = Agent([], model="kimi-k2.5:cloud", name="Alice", client=client)
-    bob = Agent(
-        [bash],
-        model="kimi-k2.5:cloud",
-        name="Bob",
-        description="Has access to the computer.",
-        client=client,
-    )
-    hannah = Agent(
-        [web_search, web_fetch],
-        model="kimi-k2.5:cloud",
-        name="Hannah",
-        description="Has access to web search and can fetch web pages.",
-        client=client,
-    )
+    agents = [
+        Agent(
+            [web_search, web_fetch],
+            model="kimi-k2.5:cloud",
+            name=name,
+            description="Have access to the web",
+            client=client,
+        )
+        for name in NAMES
+    ]
+
+    boss = Agent([bash], model="kimi-k2.5:cloud", name="Polina", description="A research team lead", client=client)
+    agents.append(boss)
 
     while True:
         try:
@@ -78,7 +79,7 @@ def main():
         if not user_input:
             continue
 
-        alice.messages.append({"role": "user", "content": user_input})
+        boss.messages.append({"role": "user", "content": user_input})
 
         def on_agent_message(agent, message):
             print(f"{agent.name}: {message.content.strip()}")
@@ -101,11 +102,11 @@ def main():
             return result
 
         with Agency(
-            agents=[alice, bob, hannah],
+            agents=agents,
             on_agent_message=on_agent_message,
             on_agent_tool_call=on_agent_tool_call,
         ) as agency:
-            agency.run(alice)
+            agency.run(boss)
 
         sleep(1)
 
