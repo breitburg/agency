@@ -2,6 +2,12 @@
 
 A minimal multi-agent orchestration framework built on the OpenAI chat completions API. Agents run in parallel threads, use tools defined as plain Python functions, and communicate with each other through message passing.
 
+## Installation
+
+```bash
+uv add git+https://github.com/breitburg/agency
+```
+
 ## Concepts
 
 `@tool()` is a decorator that turns a Python function into a tool the model can call. It inspects the function's type hints and docstring to generate the JSON schema automatically.
